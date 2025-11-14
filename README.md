@@ -196,11 +196,3 @@ This simulation report successfully demonstrates:
 The analysis aligns with realistic RRAM operation while remaining stable for analog simulation tools.
 
 ---
-
-### ✔ If you want, I can also generate:
-- GitHub folder structure  
-- A short or long version for PPT  
-- A PDF summary  
-- A viva-ready explanation  
-
-Just let me know!
