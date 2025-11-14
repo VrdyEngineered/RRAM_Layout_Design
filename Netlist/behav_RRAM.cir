@@ -1,0 +1,102 @@
+* ============================================================
+* SIMPLE 1T1R RRAM Netlist (CONVERGENCE FIX)
+* Model: Voltage-controlled switch based on an SR Latch
+* ============================================================
+
+* ---------------- Global parameters ----------------
+.param Ron=1k      ; Low Resistance State (LRS)
+.param Roff=100k   ; High Resistance State (HRS)
+.param Vth_nmos=0.4  ; Transistor threshold voltage
+
+* ---------------- RRAM SUBCIRCUIT (Simplified & Stable Model) ----------------
+* p = top terminal, n = bottom terminal
+.SUBCKT RRAM p n PARAMS: Vset=1.5 Vreset=-1.8 Ron_sub={Ron} Roff_sub={Roff}
+
+* --- Part 1: Create Trigger Signals ---
+B_s s_trig 0 V = { (V(p,n) > Vset) ? 1V : 0V }
+B_r r_trig 0 V = { (V(p,n) < Vreset) ? 1V : 0V }
+
+* --- Part 2: A Stable SR Latch to Hold the State ---
+* FIX: Replaced ideal switches with smooth tanh() functions to prevent convergence errors.
+* This creates "analog-friendly" NOR gates that ngspice can solve.
+B_nor1 q 0 V = { 0.5 * (1 - tanh(20 * (max(V(q_bar), V(s_trig)) - 0.5))) }
+B_nor2 q_bar 0 V = { 0.5 * (1 - tanh(20 * (max(V(q), V(r_trig)) - 0.5))) }
+* Resistors to ensure nodes are not floating
+Rq q 0 1Meg
+Rqbar q_bar 0 1Meg
+
+* --- Part 3: The Switchable Resistor ---
+* If V(q) is high ( > 0.5V ), resistance is Ron. Otherwise, it's Roff.
+G_mem p n VALUE = { V(p,n) / ( (V(q) > 0.5) ? Ron_sub : Roff_sub ) }
+
+.ENDS RRAM
+
+* ---------------- Top-level 1T1R Circuit ----------------
+* Wordline (gate) pulse
+Vwl wl 0 PULSE(0 1.5 0.5u 10n 10n 9.5u 20u)
+
+* Bitline source (Formatted vertically with comments)
+Vbl_src bl_raw 0 PWL(
++ 0s     0V      ; Initial state at t=0
++ 1.0u   0V
++ 1.1u   0.2V    ; t=1.1us: READ 1 (Check initial HRS)
++ 2.0u   0.2V
++ 2.1u   0V
++ 3.0u   0V
++ 3.1u   1.5V    ; t=3.1us: SET Pulse (Write to LRS)
++ 4.0u   1.5V
++ 4.1u   0V
++ 5.0u   0V
++ 5.1u   0.2V    ; t=5.1us: READ 2 (Confirm LRS)
++ 6.0u   0.2V
++ 6.1u   0V
++ 7.0u   0V
++ 7.1u  -1.5V    ; t=7.1us: RESET Pulse (Erase to HRS)
++ 8.0u  -1.5V
++ 8.1u   0V
++ 9.0u   0V
++ 9.1u   0.2V    ; t=9.1us: READ 3 (Confirm HRS)
++ 10.0u  0.2V
++ )
+
+* Zero-volt source to measure Bitline current
+Vmeas bl bl_raw DC 0
+
+* Instantiate the RRAM subcircuit
+XR1 bl bl_cell RRAM
+
+* Access NMOS Transistor (W=1u for strong drive)
+M1 bl_cell wl sl sl nmos_model W=1u L=50n
+
+* Ground for the source of the transistor
+Vsl sl 0 DC 0
+
+* Transistor model
+.MODEL nmos_model NMOS (LEVEL=1 VTO={Vth_nmos} KP=120e-6)
+
+* ---------------- Simulation Control ----------------
+.options reltol=1e-3
+.tran 50n 10.5u
+
+.control
+run
+
+* ----- Create variables for plotting -----
+let cell_current = -i(Vmeas)
+let rram_res = (v(bl)-v(bl_cell)) / (cell_current + 1p)
+
+* ----- Plots -----
+* Plot 1: Input Voltages
+plot v(bl_raw) v(wl) title 'Input Voltages (BL and WL)' xlabel 'Time (s)' ylabel 'Voltage (V)'
+
+* Plot 2: Cell Current
+plot cell_current ylimit -250u 250u title 'Current through RRAM Cell' xlabel 'Time (s)' ylabel 'Current (A)'
+
+* Plot 3: RRAM Resistance
+set ylog
+plot rram_res title 'RRAM Resistance (Log Scale)' xlabel 'Time (s)' ylabel 'Resistance (Ohms)'
+unset ylog
+
+.endc
+
+.end
