@@ -8,6 +8,10 @@ The objective is to verify **SET/RESET switching**, **read operations**, **curre
 This README summarizes the full methodology, netlist, waveforms, layout steps, and simulation results reported in the project.
 
 ---
+## **Tools Used**
+- **NGSpice** for netlist-based simulation of the 1T1R RRAM circuit.  
+- **Cadence Virtuoso** for schematic design and sense amplifier simulation.  
+- **Microwind** for layout design of the 1T1R cell and 2×2 RRAM array.
 
 ## **📁 Contents**
 - Introduction  
